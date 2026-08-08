@@ -1,8 +1,12 @@
 import { useEffect, useRef } from "react";
+import { watchLocation } from "../services/location";
 
 declare global {
   interface Window {
     Tmapv2: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      LatLng: any;
+
       Map: new (
         element: HTMLElement,
         options: {
@@ -12,32 +16,59 @@ declare global {
           zoom: number;
         },
       ) => unknown;
+
+      Marker: new (options: { position: unknown; map: unknown }) => {
+        setPosition: (position: unknown) => void;
+      };
     };
   }
 }
 
 function Map() {
-  const mapRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<HTMLDivElement | null>(null);
+
+  const markerRef = useRef<{
+    setPosition: (position: unknown) => void;
+  } | null>(null);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    let map: unknown = null;
 
-    console.log("TMAP SDK:", window.Tmapv2);
+    const stopWatching = watchLocation(
+      (position) => {
+        const { latitude, longitude } = position.coords;
 
-    if (!window.Tmapv2) {
-      console.error("TMAP SDK가 로드되지 않았습니다.");
-      return;
-    }
+        const currentPosition = new window.Tmapv2.LatLng(latitude, longitude);
 
-    new window.Tmapv2.Map(mapRef.current, {
-      center: {
-        lat: 37.5665,
-        lng: 126.978,
+        // 처음 위치를 받았을 때 지도 생성
+        if (!map) {
+          map = new window.Tmapv2.Map(mapRef.current!, {
+            center: currentPosition,
+            width: "100%",
+            height: "100%",
+            zoom: 15,
+          });
+
+          // 마커도 처음 한 번만 생성
+          markerRef.current = new window.Tmapv2.Marker({
+            position: currentPosition,
+            map,
+          });
+
+          return;
+        }
+
+        // 이후 위치가 바뀌면 기존 마커만 이동
+        markerRef.current?.setPosition(currentPosition);
       },
-      width: "100%",
-      height: "100%",
-      zoom: 15,
-    });
+      (error) => {
+        console.error("현재 위치를 추적하지 못했습니다.", error);
+      },
+    );
+
+    return () => {
+      stopWatching();
+    };
   }, []);
 
   return <div ref={mapRef} className="w-full h-full" />;
