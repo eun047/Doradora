@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { watchLocation } from "../services/location";
+import { DEFAULT_SHAPE, type Shape } from "../types/shape";
 
 declare global {
   interface Window {
@@ -40,6 +41,8 @@ type Point = {
 };
 
 function Map() {
+  const selectedShape: Shape = DEFAULT_SHAPE;
+
   const mapRef = useRef<HTMLDivElement | null>(null);
 
   const mapInstanceRef = useRef<unknown>(null);
@@ -117,13 +120,14 @@ function Map() {
         waypointRequestedRef.current = true;
 
         try {
-          console.log("Gemini 하트 waypoint 요청:", {
+          console.log(`Gemini ${selectedShape} waypoint 요청:`, {
             latitude,
             longitude,
+            shape: selectedShape,
           });
 
           const response = await fetch(
-            "http://localhost:5001/api/waypoints/heart",
+            "http://localhost:5001/api/waypoints",
             {
               method: "POST",
               headers: {
@@ -132,12 +136,13 @@ function Map() {
               body: JSON.stringify({
                 latitude,
                 longitude,
+                shape: selectedShape,
               }),
             },
           );
 
           if (!response.ok) {
-            throw new Error(`하트 waypoint 요청 실패: ${response.status}`);
+            throw new Error(`${selectedShape} waypoint 요청 실패: ${response.status}`);
           }
 
           const data = (await response.json()) as {
@@ -168,9 +173,9 @@ function Map() {
             });
           });
 
-          console.log("하트 waypoint 표시 완료");
+          console.log(`${selectedShape} waypoint 표시 완료`);
         } catch (error) {
-          console.error("하트 waypoint를 가져오지 못했습니다.", error);
+          console.error(`${selectedShape} waypoint를 가져오지 못했습니다.`, error);
         }
       },
 

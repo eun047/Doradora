@@ -2,7 +2,8 @@ import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import { getWalkingRoute } from "./services/tmap.js";
-import { generateHeartWaypoints } from "./services/gemini.js";
+import { generateWaypoints } from "./services/gemini.js";
+import { DEFAULT_SHAPE, type Shape } from "./types/shape.js";
 
 const app = express();
 const PORT = 5001;
@@ -16,9 +17,9 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.post("/api/waypoints/heart", async (req, res) => {
+app.post("/api/waypoints", async (req, res) => {
   try {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, shape = DEFAULT_SHAPE } = req.body;
 
     if (typeof latitude !== "number" || typeof longitude !== "number") {
       return res.status(400).json({
@@ -26,16 +27,20 @@ app.post("/api/waypoints/heart", async (req, res) => {
       });
     }
 
-    const waypoints = await generateHeartWaypoints(latitude, longitude);
+    const waypoints = await generateWaypoints(
+      latitude,
+      longitude,
+      shape as Shape,
+    );
 
     res.json({
       waypoints,
     });
   } catch (error) {
-    console.error("하트 waypoint 생성 실패:", error);
+    console.error("waypoint 생성 실패:", error);
 
     res.status(500).json({
-      message: "하트 waypoint를 생성하지 못했습니다.",
+      message: "waypoint를 생성하지 못했습니다.",
     });
   }
 });
