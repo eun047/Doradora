@@ -20,6 +20,10 @@ declare global {
       Marker: new (options: { position: unknown; map: unknown }) => {
         setPosition: (position: unknown) => void;
       };
+
+      Polyline: new (options: { path: unknown[]; map: unknown }) => {
+        setPath: (path: unknown[]) => void;
+      };
     };
   }
 }
@@ -31,6 +35,12 @@ function Map() {
     setPosition: (position: unknown) => void;
   } | null>(null);
 
+  const pathRef = useRef<unknown[]>([]);
+
+  const polylineRef = useRef<{
+    setPath: (path: unknown[]) => void;
+  } | null>(null);
+
   useEffect(() => {
     let map: unknown = null;
 
@@ -39,6 +49,7 @@ function Map() {
         const { latitude, longitude } = position.coords;
 
         const currentPosition = new window.Tmapv2.LatLng(latitude, longitude);
+        pathRef.current.push(currentPosition);
 
         // 처음 위치를 받았을 때 지도 생성
         if (!map) {
@@ -55,11 +66,17 @@ function Map() {
             map,
           });
 
+          polylineRef.current = new window.Tmapv2.Polyline({
+            path: pathRef.current,
+            map,
+          });
+
           return;
         }
 
         // 이후 위치가 바뀌면 기존 마커만 이동
         markerRef.current?.setPosition(currentPosition);
+        polylineRef.current?.setPath(pathRef.current);
       },
       (error) => {
         console.error("현재 위치를 추적하지 못했습니다.", error);
