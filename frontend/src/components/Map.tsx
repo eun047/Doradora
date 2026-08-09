@@ -21,6 +21,12 @@ declare global {
         setPosition: (position: unknown) => void;
       };
 
+      Label: new (options: {
+        position: unknown;
+        map: unknown;
+        content: string;
+      }) => unknown;
+
       Polyline: new (options: { path: unknown[]; map: unknown }) => {
         setPath: (path: unknown[]) => void;
       };
@@ -28,63 +34,136 @@ declare global {
   }
 }
 
+type Point = {
+  latitude: number;
+  longitude: number;
+};
+
 function Map() {
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<unknown>(null);
 
-  // 현재 위치 Marker
   const markerRef = useRef<{
     setPosition: (position: unknown) => void;
   } | null>(null);
 
-  // 사용자가 실제로 이동한 GPS 경로
-  const pathRef = useRef<unknown[]>([]);
+  const gpsPathRef = useRef<unknown[]>([]);
 
-  const polylineRef = useRef<{
+  const gpsPolylineRef = useRef<{
     setPath: (path: unknown[]) => void;
   } | null>(null);
 
-  // TMAP이 계산한 실제 보행 경로
-  const tmapPolylineRef = useRef<{
-    setPath: (path: unknown[]) => void;
-  } | null>(null);
+  const routeRequestedRef = useRef(false);
 
   useEffect(() => {
-    let map: unknown = null;
-
     const stopWatching = watchLocation(
       async (position) => {
         const { latitude, longitude } = position.coords;
 
         const currentPosition = new window.Tmapv2.LatLng(latitude, longitude);
 
-        pathRef.current.push(currentPosition);
+        // GPS 이동 경로 저장
+        gpsPathRef.current.push(currentPosition);
 
-        // 처음 위치를 받았을 때 지도 생성
-        if (!map) {
-          map = new window.Tmapv2.Map(mapRef.current!, {
+        // 지도 최초 생성
+        if (!mapInstanceRef.current) {
+          mapInstanceRef.current = new window.Tmapv2.Map(mapRef.current!, {
             center: currentPosition,
             width: "100%",
             height: "100%",
             zoom: 15,
           });
 
-          // 현재 위치 Marker
+          // 현재 위치 마커
           markerRef.current = new window.Tmapv2.Marker({
             position: currentPosition,
-            map,
+            map: mapInstanceRef.current,
+          });
+
+          // 현재 위치 라벨
+          new window.Tmapv2.Label({
+            position: currentPosition,
+            map: mapInstanceRef.current,
+            content: "START",
           });
 
           // 실제 GPS 이동 경로
-          polylineRef.current = new window.Tmapv2.Polyline({
-            path: pathRef.current,
-            map,
+          gpsPolylineRef.current = new window.Tmapv2.Polyline({
+            path: gpsPathRef.current,
+            map: mapInstanceRef.current,
+          });
+        }
+
+        // 현재 위치 업데이트
+        markerRef.current?.setPosition(currentPosition);
+
+        // GPS 경로 업데이트
+        gpsPolylineRef.current?.setPath(gpsPathRef.current);
+
+        // TMAP 경로는 한 번만 요청
+        if (routeRequestedRef.current) return;
+
+        routeRequestedRef.current = true;
+
+        const currentPoint: Point = {
+          latitude,
+          longitude,
+        };
+
+        // 테스트용 waypoint
+        const waypoints: Point[] = [
+          {
+            latitude,
+            longitude: longitude + 0.001,
+          },
+          {
+            latitude: latitude + 0.001,
+            longitude: longitude + 0.001,
+          },
+          {
+            latitude: latitude + 0.001,
+            longitude: longitude - 0.001,
+          },
+          {
+            latitude,
+            longitude: longitude - 0.001,
+          },
+        ];
+
+        // 현재 → P1 → P2 → P3 → 현재
+        const points = [currentPoint, ...waypoints, currentPoint];
+
+        // waypoint 마커 + 순서 표시
+        waypoints.forEach((point, index) => {
+          const position = new window.Tmapv2.LatLng(
+            point.latitude,
+            point.longitude,
+          );
+
+          // 마커
+          new window.Tmapv2.Marker({
+            position,
+            map: mapInstanceRef.current,
           });
 
-          // 테스트 목적지
-          const endLatitude = latitude + 0.001;
-          const endLongitude = longitude + 0.001;
+          // 순서
+          new window.Tmapv2.Label({
+            position,
+            map: mapInstanceRef.current,
+            content: `P${index + 1}`,
+          });
+        });
 
-          try {
+        try {
+          const allCoordinates: [number, number][] = [];
+
+          // 각 waypoint 사이의 TMAP 보행 경로 요청
+          for (let i = 0; i < points.length - 1; i++) {
+            const start = points[i];
+            const end = points[i + 1];
+
+            console.log(`TMAP ${i + 1}번째 구간`, start, "→", end);
+
             const response = await fetch(
               "http://localhost:5001/api/routes/walking",
               {
@@ -93,10 +172,10 @@ function Map() {
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  startX: longitude,
-                  startY: latitude,
-                  endX: endLongitude,
-                  endY: endLatitude,
+                  startX: start.longitude,
+                  startY: start.latitude,
+                  endX: end.longitude,
+                  endY: end.latitude,
                 }),
               },
             );
@@ -105,29 +184,31 @@ function Map() {
               throw new Error(`경로 요청 실패: ${response.status}`);
             }
 
-            const coordinates = await response.json();
+            const coordinates = (await response.json()) as [number, number][];
 
-            const tmapPath = coordinates.map(
-              ([longitude, latitude]: [number, number]) =>
-                new window.Tmapv2.LatLng(latitude, longitude),
+            allCoordinates.push(
+              ...(i === 0 ? coordinates : coordinates.slice(1)),
             );
-
-            tmapPolylineRef.current = new window.Tmapv2.Polyline({
-              path: tmapPath,
-              map,
-            });
-          } catch (error) {
-            console.error("TMAP 보행 경로를 가져오지 못했습니다.", error);
           }
 
-          return;
+          // TMAP 좌표 → LatLng
+          const path = allCoordinates.map(
+            ([longitude, latitude]) =>
+              new window.Tmapv2.LatLng(latitude, longitude),
+          );
+
+          // 하나의 Polyline
+          new window.Tmapv2.Polyline({
+            path,
+            map: mapInstanceRef.current,
+          });
+
+          console.log("TMAP 전체 경로 생성 완료");
+        } catch (error) {
+          console.error("TMAP 보행 경로를 가져오지 못했습니다.", error);
+
+          routeRequestedRef.current = false;
         }
-
-        // 이후 위치가 바뀌면 기존 Marker 이동
-        markerRef.current?.setPosition(currentPosition);
-
-        // GPS 이동 경로 업데이트
-        polylineRef.current?.setPath(pathRef.current);
       },
       (error) => {
         console.error("현재 위치를 추적하지 못했습니다.", error);
