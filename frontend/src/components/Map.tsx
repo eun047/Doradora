@@ -74,7 +74,22 @@ function Map() {
   useEffect(() => {
     const stopWatching = watchLocation(
       async (position) => {
-        const { latitude, longitude } = position.coords;
+        //const { latitude, longitude } = position.coords;
+
+        const USE_TEST_LOCATION = true;
+
+        const TEST_LOCATION = {
+          latitude: 37.5663,
+          longitude: 126.9779,
+        };
+
+        const latitude = USE_TEST_LOCATION
+          ? TEST_LOCATION.latitude
+          : position.coords.latitude;
+
+        const longitude = USE_TEST_LOCATION
+          ? TEST_LOCATION.longitude
+          : position.coords.longitude;
 
         const currentPosition = new window.Tmapv2.LatLng(latitude, longitude);
 
