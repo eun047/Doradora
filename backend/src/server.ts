@@ -1,7 +1,10 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
-import { getWalkingRoute } from "./services/tmap.js";
+import {
+  getWalkingRoute,
+  getWalkingRouteThroughWaypoints,
+} from "./services/tmap.js";
 import { generateWaypoints } from "./services/gemini.js";
 import { DEFAULT_SHAPE, type Shape } from "./types/shape.js";
 
@@ -62,6 +65,30 @@ app.post("/api/routes/walking", async (req, res) => {
 
     res.status(500).json({
       message: "보행 경로를 가져오지 못했습니다.",
+    });
+  }
+});
+
+app.post("/api/routes/walking/waypoints", async (req, res) => {
+  try {
+    const { points } = req.body;
+
+    if (!Array.isArray(points) || points.length < 2) {
+      return res.status(400).json({
+        message: "points 배열이 2개 이상 필요합니다.",
+      });
+    }
+
+    const route = await getWalkingRouteThroughWaypoints(points);
+
+    res.json({
+      route,
+    });
+  } catch (error) {
+    console.error("여러 waypoint 보행 경로를 가져오지 못했습니다.", error);
+
+    res.status(500).json({
+      message: "여러 waypoint의 보행 경로를 가져오지 못했습니다.",
     });
   }
 });

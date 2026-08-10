@@ -40,6 +40,10 @@ type Point = {
   longitude: number;
 };
 
+type WalkingRouteResponse = {
+  route: number[][];
+};
+
 function Map() {
   const selectedShape: Shape = DEFAULT_SHAPE;
 
@@ -47,16 +51,24 @@ function Map() {
 
   const mapInstanceRef = useRef<unknown>(null);
 
+  // 현재 위치 마커
   const markerRef = useRef<{
     setPosition: (position: unknown) => void;
   } | null>(null);
 
+  // 실제 사용자가 걸어온 GPS 경로
   const gpsPathRef = useRef<unknown[]>([]);
 
   const gpsPolylineRef = useRef<{
     setPath: (path: unknown[]) => void;
   } | null>(null);
 
+  // TMAP이 계산한 예정 산책 경로
+  const routePolylineRef = useRef<{
+    setPath: (path: unknown[]) => void;
+  } | null>(null);
+
+  // Gemini waypoint 요청 중복 방지
   const waypointRequestedRef = useRef(false);
 
   useEffect(() => {
@@ -66,15 +78,15 @@ function Map() {
 
         const currentPosition = new window.Tmapv2.LatLng(latitude, longitude);
 
-        // -------------------------
+        // --------------------------------
         // GPS 경로 저장
-        // -------------------------
+        // --------------------------------
 
         gpsPathRef.current.push(currentPosition);
 
-        // -------------------------
+        // --------------------------------
         // 지도 최초 생성
-        // -------------------------
+        // --------------------------------
 
         if (!mapInstanceRef.current) {
           mapInstanceRef.current = new window.Tmapv2.Map(mapRef.current!, {
@@ -84,34 +96,37 @@ function Map() {
             zoom: 15,
           });
 
+          // 현재 위치 마커
           markerRef.current = new window.Tmapv2.Marker({
             position: currentPosition,
             map: mapInstanceRef.current,
           });
 
+          // 시작점 표시
           new window.Tmapv2.Label({
             position: currentPosition,
             map: mapInstanceRef.current,
             content: "START",
           });
 
+          // 실제 GPS 이동 경로
           gpsPolylineRef.current = new window.Tmapv2.Polyline({
             path: gpsPathRef.current,
             map: mapInstanceRef.current,
           });
         }
 
-        // -------------------------
+        // --------------------------------
         // 현재 위치 업데이트
-        // -------------------------
+        // --------------------------------
 
         markerRef.current?.setPosition(currentPosition);
 
         gpsPolylineRef.current?.setPath(gpsPathRef.current);
 
-        // -------------------------
-        // AI waypoint 요청
-        // -------------------------
+        // --------------------------------
+        // Gemini waypoint 요청
+        // --------------------------------
 
         if (waypointRequestedRef.current) {
           return;
@@ -126,7 +141,11 @@ function Map() {
             shape: selectedShape,
           });
 
-          const response = await fetch(
+          // --------------------------------
+          // 1. Gemini waypoint 요청
+          // --------------------------------
+
+          const waypointResponse = await fetch(
             "http://localhost:5001/api/waypoints",
             {
               method: "POST",
@@ -141,21 +160,23 @@ function Map() {
             },
           );
 
-          if (!response.ok) {
-            throw new Error(`${selectedShape} waypoint 요청 실패: ${response.status}`);
+          if (!waypointResponse.ok) {
+            throw new Error(
+              `${selectedShape} waypoint 요청 실패: ${waypointResponse.status}`,
+            );
           }
 
-          const data = (await response.json()) as {
+          const waypointData = (await waypointResponse.json()) as {
             waypoints: Point[];
           };
 
-          console.log("Gemini waypoint:", data.waypoints);
+          console.log("Gemini waypoint:", waypointData.waypoints);
 
-          // -------------------------
-          // waypoint 표시
-          // -------------------------
+          // --------------------------------
+          // 2. waypoint 마커 표시
+          // --------------------------------
 
-          data.waypoints.forEach((point, index) => {
+          waypointData.waypoints.forEach((point, index) => {
             const position = new window.Tmapv2.LatLng(
               point.latitude,
               point.longitude,
@@ -174,8 +195,80 @@ function Map() {
           });
 
           console.log(`${selectedShape} waypoint 표시 완료`);
+
+          // --------------------------------
+          // 3. 전체 경로의 점 구성
+          // --------------------------------
+
+          const points: Point[] = [
+            {
+              latitude,
+              longitude,
+            },
+            ...waypointData.waypoints,
+            {
+              latitude,
+              longitude,
+            },
+          ];
+
+          console.log("전체 경로 points:", points);
+
+          // --------------------------------
+          // 4. TMAP 전체 보행 경로 요청
+          // --------------------------------
+
+          const routeResponse = await fetch(
+            "http://localhost:5001/api/routes/walking/waypoints",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                points,
+              }),
+            },
+          );
+
+          if (!routeResponse.ok) {
+            throw new Error(
+              `TMAP 전체 경로 요청 실패: ${routeResponse.status}`,
+            );
+          }
+
+          const routeData =
+            (await routeResponse.json()) as WalkingRouteResponse;
+
+          console.log("TMAP 전체 경로:", routeData.route);
+
+          // --------------------------------
+          // 5. TMAP 좌표를 Tmapv2.LatLng로 변환
+          // --------------------------------
+
+          const routePath = routeData.route.map(
+            ([longitude, latitude]) =>
+              new window.Tmapv2.LatLng(latitude, longitude),
+          );
+
+          // --------------------------------
+          // 6. 예정 산책 경로 Polyline 생성
+          // --------------------------------
+
+          routePolylineRef.current = new window.Tmapv2.Polyline({
+            path: routePath,
+            map: mapInstanceRef.current,
+          });
+
+          console.log(`${selectedShape} TMAP 경로 표시 완료`);
         } catch (error) {
-          console.error(`${selectedShape} waypoint를 가져오지 못했습니다.`, error);
+          console.error(
+            `${selectedShape} waypoint 또는 경로를 가져오지 못했습니다.`,
+            error,
+          );
+
+          // 실패했으므로 다시 시도할 수 있도록 설정
+          waypointRequestedRef.current = false;
         }
       },
 
@@ -187,9 +280,9 @@ function Map() {
     return () => {
       stopWatching();
     };
-  }, []);
+  }, [selectedShape]);
 
-  return <div ref={mapRef} className="w-full h-screen" />;
+  return <div ref={mapRef} className="w-full h-full" />;
 }
 
 export default Map;

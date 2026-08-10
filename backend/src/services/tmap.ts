@@ -57,3 +57,32 @@ export async function getWalkingRoute({
 
   return coordinates;
 }
+
+type Point = {
+  latitude: number;
+  longitude: number;
+};
+
+export async function getWalkingRouteThroughWaypoints(points: Point[]) {
+  const allCoordinates: number[][] = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+
+    const coordinates = await getWalkingRoute({
+      startX: start.longitude,
+      startY: start.latitude,
+      endX: end.longitude,
+      endY: end.latitude,
+    });
+
+    if (i === 0) {
+      allCoordinates.push(...coordinates);
+    } else {
+      allCoordinates.push(...coordinates.slice(1));
+    }
+  }
+
+  return allCoordinates;
+}
