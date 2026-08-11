@@ -1,11 +1,7 @@
-import Map from "./components/Map";
+import Home from "./pages/Home";
 
 function App() {
-  return (
-    <main className="w-full h-screen">
-      <Map />
-    </main>
-  );
+  return <Home />;
 }
 
 export default App;
