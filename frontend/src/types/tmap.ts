@@ -11,8 +11,13 @@ declare global {
           width: string;
           height: string;
           zoom: number;
+          zoomControl?: boolean;
         },
-      ) => unknown;
+      ) => {
+        zoomIn?: () => void;
+        zoomOut?: () => void;
+        setZoom?: (zoom: number) => void;
+      };
 
       Marker: new (options: { position: unknown; map: unknown }) => {
         setPosition: (position: unknown) => void;
