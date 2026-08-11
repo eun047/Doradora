@@ -14,8 +14,11 @@ const TEST_LOCATION = {
   longitude: 126.9779,
 };
 
-function Map() {
-  const selectedShape: Shape = DEFAULT_SHAPE;
+interface MapProps {
+  selectedShape?: Shape;
+}
+
+function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<unknown>(null);
 

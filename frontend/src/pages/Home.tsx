@@ -4,7 +4,11 @@ import logo from "../assets/home/logo.svg";
 import symbol1 from "../assets/home/symbol1.svg";
 import symbol2 from "../assets/home/symbol2.svg";
 
-function Home() {
+interface HomeProps {
+  onStart?: () => void;
+}
+
+function Home({ onStart }: HomeProps) {
   return (
     <main className="relative mx-auto h-dvh w-full max-w-100.5 overflow-hidden rounded-5xl bg-[#96dcff]">
       <img
@@ -32,6 +36,7 @@ function Home() {
 
       <button
         type="button"
+        onClick={onStart}
         className="
           absolute left-8.75 top-90
           h-46.25 w-83
