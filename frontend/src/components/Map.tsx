@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 import { watchLocation } from "../services/location";
 import { requestWalkingRoute } from "../services/tmap";
-import { requestWaypoints } from "../services/waypoint";
+// import { requestWaypoints } from "../services/waypoint";
 import type { Point } from "../types/map";
 import { DEFAULT_SHAPE, type Shape } from "../types/shape";
 import "../types/tmap";
-import { createLatLng, createRoutePath, showWaypoints } from "../utils/map";
+import { createLatLng, createRoutePath } from "../utils/map";
 
 const USE_TEST_LOCATION = true;
 
@@ -14,42 +14,172 @@ const TEST_LOCATION = {
   longitude: 126.9779,
 };
 
+const TEST_WAYPOINTS: Point[] = [
+  // P1
+  {
+    latitude: 37.5672,
+    longitude: 126.9762,
+  },
+
+  // P2
+  {
+    latitude: 37.5688,
+    longitude: 126.9754,
+  },
+
+  // P3
+  {
+    latitude: 37.5701,
+    longitude: 126.9757,
+  },
+
+  // P4 — 왼쪽 봉우리
+  {
+    latitude: 37.5707,
+    longitude: 126.977,
+  },
+
+  // P5 — 가운데 홈
+  {
+    latitude: 37.5697,
+    longitude: 126.9779,
+  },
+
+  // P6 — 오른쪽 봉우리
+  {
+    latitude: 37.5707,
+    longitude: 126.9788,
+  },
+
+  // P7
+  {
+    latitude: 37.5701,
+    longitude: 126.9801,
+  },
+
+  // P8
+  {
+    latitude: 37.5688,
+    longitude: 126.9804,
+  },
+
+  // P9
+  {
+    latitude: 37.5672,
+    longitude: 126.9796,
+  },
+
+  // P10
+  {
+    latitude: 37.5664,
+    longitude: 126.9789,
+  },
+
+  // P11 — 아래쪽 끝으로 이어지는 지점
+  {
+    latitude: 37.5658,
+    longitude: 126.9782,
+  },
+];
+
 interface MapProps {
   selectedShape?: Shape;
 }
 
+const ROUTE_COLOR = "#84CC16";
+const GPS_COLOR = "#FF6B4A";
+
+const calculateBearing = (
+  previous: {
+    latitude: number;
+    longitude: number;
+  },
+  current: {
+    latitude: number;
+    longitude: number;
+  },
+) => {
+  const lat1 = (previous.latitude * Math.PI) / 180;
+  const lat2 = (current.latitude * Math.PI) / 180;
+
+  const deltaLongitude =
+    ((current.longitude - previous.longitude) * Math.PI) / 180;
+
+  const y = Math.sin(deltaLongitude) * Math.cos(lat2);
+
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLongitude);
+
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
+
+  return (bearing + 360) % 360;
+};
+
+const createArrowIcon = (bearing: number) => {
+  const svg = `
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="48"
+      height="48"
+      viewBox="0 0 48 48"
+    >
+      <g transform="rotate(${bearing} 24 24)">
+        <circle
+          cx="24"
+          cy="24"
+          r="19"
+          fill="white"
+          fill-opacity="0.7"
+        />
+
+        <path
+          d="M24 7L36 34L24 29L12 34L24 7Z"
+          fill="${ROUTE_COLOR}"
+          stroke="white"
+          stroke-width="2.5"
+          stroke-linejoin="round"
+        />
+      </g>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
 function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
+
   const mapInstanceRef = useRef<{
     zoomIn?: () => void;
     zoomOut?: () => void;
   } | null>(null);
 
-  // 현재 위치 마커
   const markerRef = useRef<{
     setPosition: (position: unknown) => void;
+    setIcon?: (icon: unknown) => void;
   } | null>(null);
 
-  // 실제 사용자가 걸어온 GPS 경로
   const gpsPathRef = useRef<unknown[]>([]);
 
   const gpsPolylineRef = useRef<{
     setPath: (path: unknown[]) => void;
   } | null>(null);
 
-  // TMAP이 계산한 예정 산책 경로
   const routePolylineRef = useRef<{
     setPath: (path: unknown[]) => void;
   } | null>(null);
 
-  // Gemini waypoint 요청 중복 방지
-  const waypointRequestedRef = useRef(false);
+  const routeRequestedRef = useRef(false);
+
+  const previousPositionRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   useEffect(() => {
     const stopWatching = watchLocation(
       async (position) => {
-        //const { latitude, longitude } = position.coords;
-
         const latitude = USE_TEST_LOCATION
           ? TEST_LOCATION.latitude
           : position.coords.latitude;
@@ -60,7 +190,27 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
 
         const currentPosition = createLatLng(latitude, longitude);
 
-        // GPS 경로 저장
+        const currentPoint = {
+          latitude,
+          longitude,
+        };
+
+        let bearing = 0;
+
+        if (previousPositionRef.current) {
+          const previousPosition = previousPositionRef.current;
+
+          const movedDistance =
+            Math.abs(latitude - previousPosition.latitude) +
+            Math.abs(longitude - previousPosition.longitude);
+
+          if (movedDistance > 0.000001) {
+            bearing = calculateBearing(previousPosition, currentPoint);
+          }
+        }
+
+        previousPositionRef.current = currentPoint;
+
         gpsPathRef.current.push(currentPosition);
 
         if (!mapInstanceRef.current) {
@@ -72,56 +222,63 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
             zoomControl: false,
           });
 
-          // 현재 위치 마커
           markerRef.current = new window.Tmapv2.Marker({
             position: currentPosition,
             map: mapInstanceRef.current,
+            icon: createArrowIcon(bearing),
+            iconSize: new window.Tmapv2.Size(48, 48),
           });
 
-          // 시작점 표시
-          new window.Tmapv2.Label({
-            position: currentPosition,
-            map: mapInstanceRef.current,
-            content: "START",
-          });
-
-          // 실제 GPS 이동 경로
           gpsPolylineRef.current = new window.Tmapv2.Polyline({
             path: gpsPathRef.current,
             map: mapInstanceRef.current,
+            strokeColor: GPS_COLOR,
+            strokeWeight: 6,
+            strokeOpacity: 1,
           });
         }
 
-        // 현재 위치 업데이트
         markerRef.current?.setPosition(currentPosition);
+
+        markerRef.current?.setIcon?.(createArrowIcon(bearing));
+
         gpsPolylineRef.current?.setPath(gpsPathRef.current);
 
-        if (waypointRequestedRef.current) {
+        if (routeRequestedRef.current) {
           return;
         }
 
-        waypointRequestedRef.current = true;
+        routeRequestedRef.current = true;
 
         try {
-          console.log(`Gemini ${selectedShape} waypoint 요청:`, {
-            latitude,
-            longitude,
-            shape: selectedShape,
-          });
+          /*
+           * 현재는 Gemini 대신 테스트 waypoint를 사용합니다.
+           *
+           * 나중에 Gemini를 다시 사용할 때:
+           * 1. 위의 requestWaypoints import 주석 해제
+           * 2. 아래 테스트 waypoint 부분 주석 처리
+           * 3. Gemini waypoint 부분 주석 해제
+           */
 
-          // 1. Gemini waypoint 요청
+          const points: Point[] = [
+            {
+              latitude,
+              longitude,
+            },
+            ...TEST_WAYPOINTS,
+            {
+              latitude,
+              longitude,
+            },
+          ];
+
+          /*
           const waypoints = await requestWaypoints(
             latitude,
             longitude,
             selectedShape,
           );
-          console.log("Gemini waypoint:", waypoints);
 
-          // 2. waypoint 마커 표시
-          showWaypoints(mapInstanceRef.current, waypoints);
-          console.log(`${selectedShape} waypoint 표시 완료`);
-
-          // 3. 전체 경로의 점 구성
           const points: Point[] = [
             {
               latitude,
@@ -133,34 +290,29 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
               longitude,
             },
           ];
+          */
 
-          console.log("전체 경로 points:", points);
+          console.log(`${selectedShape} 테스트 경로 points:`, points);
 
-          // 4. TMAP 전체 보행 경로 요청
           const route = await requestWalkingRoute(points);
-          console.log("TMAP 전체 경로:", route);
 
-          // 5. TMAP 좌표를 Tmapv2.LatLng로 변환
           const routePath = createRoutePath(route);
 
-          // 6. 예정 산책 경로 Polyline 생성
           routePolylineRef.current = new window.Tmapv2.Polyline({
             path: routePath,
             map: mapInstanceRef.current,
+            strokeColor: ROUTE_COLOR,
+            strokeWeight: 6,
+            strokeOpacity: 1,
           });
 
           console.log(`${selectedShape} TMAP 경로 표시 완료`);
         } catch (error) {
-          console.error(
-            `${selectedShape} waypoint 또는 경로를 가져오지 못했습니다.`,
-            error,
-          );
+          console.error(`${selectedShape} 경로를 가져오지 못했습니다.`, error);
 
-          // 실패했으므로 다시 시도할 수 있도록 설정
-          waypointRequestedRef.current = false;
+          routeRequestedRef.current = false;
         }
       },
-
       (error) => {
         console.error("현재 위치를 추적하지 못했습니다.", error);
       },
@@ -195,6 +347,7 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
         >
           +
         </button>
+
         <button
           type="button"
           onClick={handleZoomOut}

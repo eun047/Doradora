@@ -4,6 +4,8 @@ declare global {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       LatLng: any;
 
+      Size: new (width: number, height: number) => unknown;
+
       Map: new (
         element: HTMLElement,
         options: {
@@ -19,8 +21,14 @@ declare global {
         setZoom?: (zoom: number) => void;
       };
 
-      Marker: new (options: { position: unknown; map: unknown }) => {
+      Marker: new (options: {
+        position: unknown;
+        map: unknown;
+        icon?: string;
+        iconSize?: unknown;
+      }) => {
         setPosition: (position: unknown) => void;
+        setIcon?: (icon: unknown) => void;
       };
 
       Label: new (options: {
@@ -29,7 +37,13 @@ declare global {
         content: string;
       }) => unknown;
 
-      Polyline: new (options: { path: unknown[]; map: unknown }) => {
+      Polyline: new (options: {
+        path: unknown[];
+        map: unknown;
+        strokeColor?: string;
+        strokeWeight?: number;
+        strokeOpacity?: number;
+      }) => {
         setPath: (path: unknown[]) => void;
       };
     };

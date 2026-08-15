@@ -45,11 +45,22 @@ export async function getWalkingRoute({
     }),
   });
 
+  const responseText = await response.text();
+
   if (!response.ok) {
-    throw new Error(`TMAP API 요청 실패: ${response.status}`);
+    console.error("TMAP API 오류:", {
+      status: response.status,
+      body: responseText,
+      startX,
+      startY,
+      endX,
+      endY,
+    });
+
+    throw new Error(`TMAP API 요청 실패: ${response.status} ${responseText}`);
   }
 
-  const data = (await response.json()) as WalkingRouteResponse;
+  const data = JSON.parse(responseText) as WalkingRouteResponse;
 
   const coordinates = data.features
     .filter((feature) => feature.geometry.type === "LineString")
@@ -69,6 +80,11 @@ export async function getWalkingRouteThroughWaypoints(points: Point[]) {
   for (let i = 0; i < points.length - 1; i++) {
     const start = points[i];
     const end = points[i + 1];
+
+    console.log(`TMAP 구간 ${i + 1}/${points.length - 1}:`, {
+      start,
+      end,
+    });
 
     const coordinates = await getWalkingRoute({
       startX: start.longitude,
