@@ -4,6 +4,10 @@ declare global {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       LatLng: any;
 
+      LatLngBounds: new () => {
+        extend: (latLng: unknown) => void;
+      };
+
       Size: new (width: number, height: number) => unknown;
 
       Map: new (
@@ -19,6 +23,7 @@ declare global {
         zoomIn?: () => void;
         zoomOut?: () => void;
         setZoom?: (zoom: number) => void;
+        fitBounds?: (bounds: unknown) => void;
       };
 
       Marker: new (options: {

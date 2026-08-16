@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { Menu, ChevronDown, X } from "lucide-react";
-import Map from "./components/Map";
+import { useRef, useState } from "react";
+import { ChevronDown, Menu, X } from "lucide-react";
+import Map, { type MapHandle } from "./components/Map";
+import Collection from "./pages/Collection";
+import Complete from "./pages/Complete";
 import Home from "./pages/Home";
-import SelectShape from "./pages/SelectShape";
 import MenuPage from "./pages/Menu";
+import SelectShape from "./pages/SelectShape";
 import type { Shape } from "./types/shape";
+import { saveCollectionItem } from "./utils/collection";
 
 type Page = "home" | "select-shape" | "map" | "complete" | "collection";
 
@@ -12,6 +15,10 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>("home");
   const [selectedShape, setSelectedShape] = useState<Shape>("heart");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [mapImage, setMapImage] = useState<string>("");
+  const [isCapturing, setIsCapturing] = useState(false);
+
+  const mapComponentRef = useRef<MapHandle | null>(null);
 
   // 홈 → 그림 선택
   const handleStart = () => {
@@ -34,9 +41,23 @@ function App() {
     setIsMenuOpen((prev) => !prev);
   };
 
-  // 저장하기 → 완주 화면
-  const handleSavePath = () => {
-    setCurrentPage("complete");
+  // 그림 저장하기 → 지도 캡처 후 localStorage 저장 & 완주 화면 이동
+  const handleSavePath = async () => {
+    if (isCapturing) return;
+    setIsCapturing(true);
+
+    try {
+      const capturedImage = await mapComponentRef.current?.captureMap();
+      if (capturedImage) {
+        saveCollectionItem(selectedShape, capturedImage);
+        setMapImage(capturedImage);
+        setCurrentPage("complete");
+      }
+    } catch (error) {
+      console.error("지도 캡처 및 저장 실패:", error);
+    } finally {
+      setIsCapturing(false);
+    }
   };
 
   // 메뉴 → 홈
@@ -73,17 +94,24 @@ function App() {
   if (currentPage === "map") {
     return (
       <main className="relative mx-auto h-dvh w-full max-w-100.5 overflow-hidden rounded-5xl bg-[#96dcff]">
-        <Map selectedShape={selectedShape} />
+        <Map ref={mapComponentRef} selectedShape={selectedShape} />
 
         <div className="absolute bottom-8 left-0 right-0 z-50 flex justify-center px-6">
           <button
             type="button"
             onClick={handleSavePath}
+            disabled={isCapturing}
             aria-label="그림 저장하기"
-            className="flex h-19 w-full cursor-pointer items-center justify-center rounded-[30px] border-[3px] border-[#2C1E18]/10 bg-[#82C91E] shadow-[0_6px_0_#5C9312] transition-transform active:scale-95 hover:bg-[#77B81B]"
+            className="flex h-19 w-full cursor-pointer items-center justify-center rounded-[30px] border-[3px] border-[#2C1E18]/10 bg-[#82C91E] shadow-[0_6px_0_#5C9312] transition-transform active:scale-95 hover:bg-[#77B81B] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white">
-              <ChevronDown size={36} strokeWidth={4} />
+              {isCapturing ? (
+                <span className="text-xs font-bold leading-tight">
+                  저장중
+                </span>
+              ) : (
+                <ChevronDown size={36} strokeWidth={4} />
+              )}
             </div>
           </button>
         </div>
@@ -114,18 +142,15 @@ function App() {
 
   if (currentPage === "complete") {
     return (
-      <main className="relative mx-auto flex h-dvh w-full max-w-100.5 items-center justify-center overflow-hidden rounded-5xl bg-[#52778A] text-2xl font-bold text-white">
-        Complete! 페이지 준비 중...
-      </main>
+      <Complete
+        mapImage={mapImage}
+        onComplete={() => setCurrentPage("collection")}
+      />
     );
   }
 
   if (currentPage === "collection") {
-    return (
-      <main className="relative mx-auto flex h-dvh w-full max-w-100.5 items-center justify-center overflow-hidden rounded-5xl bg-[#96dcff] text-2xl font-bold text-[#3e2723]">
-        Collection 페이지 준비 중...
-      </main>
-    );
+    return <Collection onBack={handleBackToHome} />;
   }
 
   return null;

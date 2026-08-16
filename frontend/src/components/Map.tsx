@@ -1,4 +1,11 @@
-import { useEffect, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import html2canvas from "html2canvas";
 import { watchLocation } from "../services/location";
 import { requestWalkingRoute } from "../services/tmap";
 // import { requestWaypoints } from "../services/waypoint";
@@ -86,6 +93,10 @@ interface MapProps {
   selectedShape?: Shape;
 }
 
+export interface MapHandle {
+  captureMap: () => Promise<string | null>;
+}
+
 const ROUTE_COLOR = "#84CC16";
 const GPS_COLOR = "#FF6B4A";
 
@@ -147,12 +158,17 @@ const createArrowIcon = (bearing: number) => {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
-function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
+const Map = forwardRef<MapHandle, MapProps>(function Map(
+  { selectedShape = DEFAULT_SHAPE }: MapProps,
+  ref,
+) {
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const [isCapturingInternal, setIsCapturingInternal] = useState(false);
 
   const mapInstanceRef = useRef<{
     zoomIn?: () => void;
     zoomOut?: () => void;
+    fitBounds?: (bounds: unknown) => void;
   } | null>(null);
 
   const markerRef = useRef<{
@@ -161,6 +177,12 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
   } | null>(null);
 
   const gpsPathRef = useRef<unknown[]>([]);
+  const routePathRef = useRef<unknown[]>([]);
+
+  const currentPointRef = useRef<Point>({
+    latitude: TEST_LOCATION.latitude,
+    longitude: TEST_LOCATION.longitude,
+  });
 
   const gpsPolylineRef = useRef<{
     setPath: (path: unknown[]) => void;
@@ -171,11 +193,132 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
   } | null>(null);
 
   const routeRequestedRef = useRef(false);
+  const isCapturingRef = useRef(false);
 
   const previousPositionRef = useRef<{
     latitude: number;
     longitude: number;
   } | null>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      captureMap: async () => {
+        if (isCapturingRef.current) return null;
+        isCapturingRef.current = true;
+        setIsCapturingInternal(true);
+
+        try {
+          // 1. 자동 줌: 전체 waypoint 및 경로가 들어오는 LatLngBounds 계산
+          if (mapInstanceRef.current && window.Tmapv2?.LatLngBounds) {
+            const bounds = new window.Tmapv2.LatLngBounds();
+            const allPoints: Point[] = [
+              currentPointRef.current,
+              ...TEST_WAYPOINTS,
+            ];
+
+            type TmapPointLike = {
+              lat?: () => number;
+              lng?: () => number;
+              _lat?: number;
+              _lng?: number;
+            };
+
+            // routePath 좌표 추출
+            (routePathRef.current as TmapPointLike[]).forEach((pt) => {
+              if (!pt) return;
+              if (
+                typeof pt.lat === "function" &&
+                typeof pt.lng === "function"
+              ) {
+                allPoints.push({ latitude: pt.lat(), longitude: pt.lng() });
+              } else if (
+                typeof pt._lat === "number" &&
+                typeof pt._lng === "number"
+              ) {
+                allPoints.push({ latitude: pt._lat, longitude: pt._lng });
+              }
+            });
+
+            // GPS 경로 좌표 추출
+            (gpsPathRef.current as TmapPointLike[]).forEach((pt) => {
+              if (!pt) return;
+              if (
+                typeof pt.lat === "function" &&
+                typeof pt.lng === "function"
+              ) {
+                allPoints.push({ latitude: pt.lat(), longitude: pt.lng() });
+              } else if (
+                typeof pt._lat === "number" &&
+                typeof pt._lng === "number"
+              ) {
+                allPoints.push({ latitude: pt._lat, longitude: pt._lng });
+              }
+            });
+
+            if (allPoints.length > 0) {
+              let minLat = allPoints[0].latitude;
+              let maxLat = allPoints[0].latitude;
+              let minLng = allPoints[0].longitude;
+              let maxLng = allPoints[0].longitude;
+
+              allPoints.forEach((p) => {
+                if (p.latitude < minLat) minLat = p.latitude;
+                if (p.latitude > maxLat) maxLat = p.latitude;
+                if (p.longitude < minLng) minLng = p.longitude;
+                if (p.longitude > maxLng) maxLng = p.longitude;
+              });
+
+              const latDelta = Math.max(maxLat - minLat, 0.002);
+              const lngDelta = Math.max(maxLng - minLng, 0.002);
+
+              // 하트 전체가 잘리지 않도록 20% 여백 확보
+              const latMargin = latDelta * 0.2;
+              const lngMargin = lngDelta * 0.2;
+
+              bounds.extend(
+                createLatLng(minLat - latMargin, minLng - lngMargin),
+              );
+              bounds.extend(
+                createLatLng(maxLat + latMargin, maxLng + lngMargin),
+              );
+
+              mapInstanceRef.current.fitBounds?.(bounds);
+            }
+          }
+
+          // 2. 렌더링 완료 대기 (타일 및 폴리라인 안착)
+          await new Promise((resolve) => setTimeout(resolve, 750));
+
+          // 3. 지도 내부 img 태그 crossOrigin 설정
+          if (mapRef.current) {
+            const images = mapRef.current.querySelectorAll("img");
+            images.forEach((img) => {
+              img.crossOrigin = "anonymous";
+            });
+          }
+
+          // 4. 지도 영역 캡처
+          const canvas = await html2canvas(mapRef.current!, {
+            useCORS: true,
+            allowTaint: true,
+            scale: 2,
+            logging: false,
+            backgroundColor: "#96dcff",
+          });
+
+          return canvas.toDataURL("image/png");
+        } catch (error) {
+          console.error("지도 캡처 실패:", error);
+          return null;
+        } finally {
+          setIsCapturingInternal(false);
+          isCapturingRef.current = false;
+        }
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     const stopWatching = watchLocation(
@@ -194,6 +337,8 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
           latitude,
           longitude,
         };
+
+        currentPointRef.current = currentPoint;
 
         let bearing = 0;
 
@@ -297,6 +442,7 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
           const route = await requestWalkingRoute(points);
 
           const routePath = createRoutePath(route);
+          routePathRef.current = routePath;
 
           routePolylineRef.current = new window.Tmapv2.Polyline({
             path: routePath,
@@ -338,27 +484,29 @@ function Map({ selectedShape = DEFAULT_SHAPE }: MapProps) {
         className="h-full w-full [&_div[class*='tmap']]:bottom-6! [&_div[class*='tmap']]:left-4! [&_div[class*='tmap']]:right-auto! [&_div[class*='tmap']]:top-auto!"
       />
 
-      <div className="absolute top-6 left-4 z-40 flex flex-col overflow-hidden rounded-2xl border-2 border-[#09402e]/20 bg-white/90 shadow-lg backdrop-blur-md">
-        <button
-          type="button"
-          onClick={handleZoomIn}
-          className="flex h-10 w-10 cursor-pointer items-center justify-center border-b border-gray-200 text-xl font-bold text-[#3e2723] transition-all hover:bg-black/5 active:scale-95"
-          aria-label="지도 확대"
-        >
-          +
-        </button>
+      {!isCapturingInternal && (
+        <div className="absolute top-6 left-4 z-40 flex flex-col overflow-hidden rounded-2xl border-2 border-[#09402e]/20 bg-white/90 shadow-lg backdrop-blur-md">
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="flex h-10 w-10 cursor-pointer items-center justify-center border-b border-gray-200 text-xl font-bold text-[#3e2723] transition-all hover:bg-black/5 active:scale-95"
+            aria-label="지도 확대"
+          >
+            +
+          </button>
 
-        <button
-          type="button"
-          onClick={handleZoomOut}
-          className="flex h-10 w-10 cursor-pointer items-center justify-center text-xl font-bold text-[#3e2723] transition-all hover:bg-black/5 active:scale-95"
-          aria-label="지도 축소"
-        >
-          −
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="flex h-10 w-10 cursor-pointer items-center justify-center text-xl font-bold text-[#3e2723] transition-all hover:bg-black/5 active:scale-95"
+            aria-label="지도 축소"
+          >
+            −
+          </button>
+        </div>
+      )}
     </div>
   );
-}
+});
 
 export default Map;
