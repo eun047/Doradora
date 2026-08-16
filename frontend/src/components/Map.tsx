@@ -269,12 +269,12 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
                 if (p.longitude > maxLng) maxLng = p.longitude;
               });
 
-              const latDelta = Math.max(maxLat - minLat, 0.002);
-              const lngDelta = Math.max(maxLng - minLng, 0.002);
+              const latDelta = Math.max(maxLat - minLat, 0.001);
+              const lngDelta = Math.max(maxLng - minLng, 0.001);
 
-              // 하트 전체가 잘리지 않도록 20% 여백 확보
-              const latMargin = latDelta * 0.2;
-              const lngMargin = lngDelta * 0.2;
+              // 줌 크기를 키우기 위해 여백을 5%로 좁혀 화면에 크게 들어오도록 합니다.
+              const latMargin = latDelta * 0.05;
+              const lngMargin = lngDelta * 0.05;
 
               bounds.extend(
                 createLatLng(minLat - latMargin, minLng - lngMargin),

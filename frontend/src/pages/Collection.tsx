@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import cloud from "../assets/collection/cloud.svg";
 import grass from "../assets/collection/grass.svg";
 import backIcon from "../assets/collection/back.svg";
@@ -7,7 +8,7 @@ import heartIcon from "../assets/select-shape/heart.svg";
 import starIcon from "../assets/select-shape/star.svg";
 import type { CollectionItem } from "../types/collection";
 import type { Shape } from "../types/shape";
-import { getCollection } from "../utils/collection";
+import { deleteCollectionItem, getCollection } from "../utils/collection";
 
 interface CollectionProps {
   onBack?: () => void;
@@ -34,7 +35,17 @@ function formatDate(isoString: string) {
 }
 
 function Collection({ onBack }: CollectionProps) {
-  const [items] = useState<CollectionItem[]>(() => getCollection());
+  const [items, setItems] = useState<CollectionItem[]>(() => getCollection());
+
+  const handleDelete = (id: string) => {
+    const confirmed = window.confirm("이 그림을 컬렉션에서 삭제할까요?");
+    if (!confirmed) return;
+
+    const success = deleteCollectionItem(id);
+    if (success) {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    }
+  };
 
   return (
     <main className="relative mx-auto h-dvh w-full max-w-100.5 overflow-hidden rounded-5xl bg-[#96dcff]">
@@ -88,9 +99,20 @@ function Collection({ onBack }: CollectionProps) {
                       </span>
                     </div>
 
-                    <span className="text-xs font-bold text-[#3e2723]/60">
-                      {formatDate(item.createdAt)}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-[#3e2723]/60">
+                        {formatDate(item.createdAt)}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        aria-label="그림 삭제하기"
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[#3e2723]/50 transition-colors hover:bg-[#FF6B4A]/15 hover:text-[#FF6B4A] active:scale-95"
+                      >
+                        <Trash2 size={18} strokeWidth={2.2} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="relative h-130 w-full overflow-hidden rounded-2xl border-3 border-[#09402e]/20 bg-white/90">

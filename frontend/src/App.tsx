@@ -49,8 +49,15 @@ function App() {
     try {
       const capturedImage = await mapComponentRef.current?.captureMap();
       if (capturedImage) {
-        saveCollectionItem(selectedShape, capturedImage);
+        // Complete 화면에는 원본 캡처 이미지 전달
         setMapImage(capturedImage);
+
+        // Collection 저장 전 이미지 용량 압축 및 저장 수행
+        const saved = await saveCollectionItem(selectedShape, capturedImage);
+        if (!saved) {
+          alert("저장 공간이 부족해 그림을 컬렉션에 저장하지 못했어요.");
+        }
+
         setCurrentPage("complete");
       }
     } catch (error) {
