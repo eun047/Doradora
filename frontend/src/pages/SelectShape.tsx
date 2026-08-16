@@ -69,14 +69,12 @@ const CARDS: CardItem[] = [...UNLOCKED_CARDS, ...LOCKED_CARDS];
 function SelectShape({ onSelectShape, onBack }: SelectShapeProps) {
   return (
     <main className="relative mx-auto h-dvh w-full max-w-100.5 overflow-hidden rounded-5xl bg-[#96dcff]">
-      {/* 구름 배경 */}
       <img
         src={cloud}
         alt=""
         className="pointer-events-none absolute -left-22 -top-14 z-0 h-212.5 w-166.75 max-w-none"
       />
 
-      {/* 뒤로 가기 버튼 */}
       <button
         type="button"
         onClick={onBack}
@@ -86,7 +84,6 @@ function SelectShape({ onSelectShape, onBack }: SelectShapeProps) {
         <img src={backIcon} alt="뒤로가기" className="h-10 w-10" />
       </button>
 
-      {/* 세로 스크롤 가능한 모양 카드 영역 (2열 그리드) */}
       <div className="absolute inset-x-0 bottom-24 top-24 z-10 overflow-y-auto px-6.75 pb-4 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <div className="grid grid-cols-2 gap-x-5 gap-y-5.5 justify-items-center">
           {CARDS.map((card) => {
@@ -119,14 +116,12 @@ function SelectShape({ onSelectShape, onBack }: SelectShapeProps) {
         </div>
       </div>
 
-      {/* 잔디 배경 */}
       <img
         src={grass}
         alt=""
         className="pointer-events-none absolute -left-22 top-165 h-52.25 w-144.25 max-w-none"
       />
 
-      {/* 하단 안내 텍스트 */}
       <p className="absolute bottom-8 left-1/2 z-30 -translate-x-1/2 text-center leading-normal text-[#3e2723]">
         오늘 걸어볼 모양은?
       </p>
