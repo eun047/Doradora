@@ -6,9 +6,10 @@ import symbol2 from "../assets/home/symbol2.svg";
 
 interface HomeProps {
   onStart?: () => void;
+  onCollection?: () => void;
 }
 
-function Home({ onStart }: HomeProps) {
+function Home({ onStart, onCollection }: HomeProps) {
   return (
     <main className="relative mx-auto h-dvh w-full max-w-100.5 overflow-hidden rounded-5xl bg-[#96dcff]">
       <img
@@ -59,6 +60,7 @@ function Home({ onStart }: HomeProps) {
 
       <button
         type="button"
+        onClick={onCollection}
         className="
           absolute left-8.75 top-138
           h-20.25 w-83

@@ -79,7 +79,12 @@ function App() {
   };
 
   if (currentPage === "home") {
-    return <Home onStart={handleStart} />;
+    return (
+      <Home
+        onStart={handleStart}
+        onCollection={handleMenuCollection}
+      />
+    );
   }
 
   if (currentPage === "select-shape") {
