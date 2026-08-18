@@ -6,88 +6,31 @@ import {
   useState,
 } from "react";
 import html2canvas from "html2canvas";
+import {
+  GPS_COLOR,
+  ROUTE_COLOR,
+  TEST_LOCATION,
+  TEST_WAYPOINTS,
+  USE_TEST_LOCATION,
+} from "../constants/map";
 import { watchLocation } from "../services/location";
 import { requestWalkingRoute } from "../services/tmap";
 // import { requestWaypoints } from "../services/waypoint";
 import type { Point } from "../types/map";
 import { DEFAULT_SHAPE, type Shape } from "../types/shape";
+import type {
+  TmapMapInstance,
+  TmapMarkerInstance,
+  TmapPolylineInstance,
+} from "../types/tmap";
 import "../types/tmap";
-import { createLatLng, createRoutePath } from "../utils/map";
-
-const USE_TEST_LOCATION = true;
-
-const TEST_LOCATION = {
-  latitude: 37.5663,
-  longitude: 126.9779,
-};
-
-const TEST_WAYPOINTS: Point[] = [
-  // P1
-  {
-    latitude: 37.5672,
-    longitude: 126.9762,
-  },
-
-  // P2
-  {
-    latitude: 37.5688,
-    longitude: 126.9754,
-  },
-
-  // P3
-  {
-    latitude: 37.5701,
-    longitude: 126.9757,
-  },
-
-  // P4 — 왼쪽 봉우리
-  {
-    latitude: 37.5707,
-    longitude: 126.977,
-  },
-
-  // P5 — 가운데 홈
-  {
-    latitude: 37.5697,
-    longitude: 126.9779,
-  },
-
-  // P6 — 오른쪽 봉우리
-  {
-    latitude: 37.5707,
-    longitude: 126.9788,
-  },
-
-  // P7
-  {
-    latitude: 37.5701,
-    longitude: 126.9801,
-  },
-
-  // P8
-  {
-    latitude: 37.5688,
-    longitude: 126.9804,
-  },
-
-  // P9
-  {
-    latitude: 37.5672,
-    longitude: 126.9796,
-  },
-
-  // P10
-  {
-    latitude: 37.5664,
-    longitude: 126.9789,
-  },
-
-  // P11 — 아래쪽 끝으로 이어지는 지점
-  {
-    latitude: 37.5658,
-    longitude: 126.9782,
-  },
-];
+import {
+  calculateBearing,
+  calculateRouteBounds,
+  createArrowIcon,
+  createLatLng,
+  createRoutePath,
+} from "../utils/map";
 
 interface MapProps {
   selectedShape?: Shape;
@@ -97,67 +40,6 @@ export interface MapHandle {
   captureMap: () => Promise<string | null>;
 }
 
-const ROUTE_COLOR = "#84CC16";
-const GPS_COLOR = "#FF6B4A";
-
-const calculateBearing = (
-  previous: {
-    latitude: number;
-    longitude: number;
-  },
-  current: {
-    latitude: number;
-    longitude: number;
-  },
-) => {
-  const lat1 = (previous.latitude * Math.PI) / 180;
-  const lat2 = (current.latitude * Math.PI) / 180;
-
-  const deltaLongitude =
-    ((current.longitude - previous.longitude) * Math.PI) / 180;
-
-  const y = Math.sin(deltaLongitude) * Math.cos(lat2);
-
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLongitude);
-
-  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-
-  return (bearing + 360) % 360;
-};
-
-const createArrowIcon = (bearing: number) => {
-  const svg = `
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="48"
-      height="48"
-      viewBox="0 0 48 48"
-    >
-      <g transform="rotate(${bearing} 24 24)">
-        <circle
-          cx="24"
-          cy="24"
-          r="19"
-          fill="white"
-          fill-opacity="0.7"
-        />
-
-        <path
-          d="M24 7L36 34L24 29L12 34L24 7Z"
-          fill="${ROUTE_COLOR}"
-          stroke="white"
-          stroke-width="2.5"
-          stroke-linejoin="round"
-        />
-      </g>
-    </svg>
-  `;
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-};
-
 const Map = forwardRef<MapHandle, MapProps>(function Map(
   { selectedShape = DEFAULT_SHAPE }: MapProps,
   ref,
@@ -165,16 +47,8 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [isCapturingInternal, setIsCapturingInternal] = useState(false);
 
-  const mapInstanceRef = useRef<{
-    zoomIn?: () => void;
-    zoomOut?: () => void;
-    fitBounds?: (bounds: unknown) => void;
-  } | null>(null);
-
-  const markerRef = useRef<{
-    setPosition: (position: unknown) => void;
-    setIcon?: (icon: unknown) => void;
-  } | null>(null);
+  const mapInstanceRef = useRef<TmapMapInstance | null>(null);
+  const markerRef = useRef<TmapMarkerInstance | null>(null);
 
   const gpsPathRef = useRef<unknown[]>([]);
   const routePathRef = useRef<unknown[]>([]);
@@ -184,21 +58,13 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
     longitude: TEST_LOCATION.longitude,
   });
 
-  const gpsPolylineRef = useRef<{
-    setPath: (path: unknown[]) => void;
-  } | null>(null);
-
-  const routePolylineRef = useRef<{
-    setPath: (path: unknown[]) => void;
-  } | null>(null);
+  const gpsPolylineRef = useRef<TmapPolylineInstance | null>(null);
+  const routePolylineRef = useRef<TmapPolylineInstance | null>(null);
 
   const routeRequestedRef = useRef(false);
   const isCapturingRef = useRef(false);
 
-  const previousPositionRef = useRef<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const previousPositionRef = useRef<Point | null>(null);
 
   useImperativeHandle(
     ref,
@@ -210,79 +76,15 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
 
         try {
           // 1. 자동 줌: 전체 waypoint 및 경로가 들어오는 LatLngBounds 계산
-          if (mapInstanceRef.current && window.Tmapv2?.LatLngBounds) {
-            const bounds = new window.Tmapv2.LatLngBounds();
-            const allPoints: Point[] = [
+          if (mapInstanceRef.current) {
+            const bounds = calculateRouteBounds(
               currentPointRef.current,
-              ...TEST_WAYPOINTS,
-            ];
+              TEST_WAYPOINTS,
+              routePathRef.current,
+              gpsPathRef.current,
+            );
 
-            type TmapPointLike = {
-              lat?: () => number;
-              lng?: () => number;
-              _lat?: number;
-              _lng?: number;
-            };
-
-            // routePath 좌표 추출
-            (routePathRef.current as TmapPointLike[]).forEach((pt) => {
-              if (!pt) return;
-              if (
-                typeof pt.lat === "function" &&
-                typeof pt.lng === "function"
-              ) {
-                allPoints.push({ latitude: pt.lat(), longitude: pt.lng() });
-              } else if (
-                typeof pt._lat === "number" &&
-                typeof pt._lng === "number"
-              ) {
-                allPoints.push({ latitude: pt._lat, longitude: pt._lng });
-              }
-            });
-
-            // GPS 경로 좌표 추출
-            (gpsPathRef.current as TmapPointLike[]).forEach((pt) => {
-              if (!pt) return;
-              if (
-                typeof pt.lat === "function" &&
-                typeof pt.lng === "function"
-              ) {
-                allPoints.push({ latitude: pt.lat(), longitude: pt.lng() });
-              } else if (
-                typeof pt._lat === "number" &&
-                typeof pt._lng === "number"
-              ) {
-                allPoints.push({ latitude: pt._lat, longitude: pt._lng });
-              }
-            });
-
-            if (allPoints.length > 0) {
-              let minLat = allPoints[0].latitude;
-              let maxLat = allPoints[0].latitude;
-              let minLng = allPoints[0].longitude;
-              let maxLng = allPoints[0].longitude;
-
-              allPoints.forEach((p) => {
-                if (p.latitude < minLat) minLat = p.latitude;
-                if (p.latitude > maxLat) maxLat = p.latitude;
-                if (p.longitude < minLng) minLng = p.longitude;
-                if (p.longitude > maxLng) maxLng = p.longitude;
-              });
-
-              const latDelta = Math.max(maxLat - minLat, 0.001);
-              const lngDelta = Math.max(maxLng - minLng, 0.001);
-
-              // 줌 크기를 키우기 위해 여백을 5%로 좁혀 화면에 크게 들어오도록 합니다.
-              const latMargin = latDelta * 0.05;
-              const lngMargin = lngDelta * 0.05;
-
-              bounds.extend(
-                createLatLng(minLat - latMargin, minLng - lngMargin),
-              );
-              bounds.extend(
-                createLatLng(maxLat + latMargin, maxLng + lngMargin),
-              );
-
+            if (bounds) {
               mapInstanceRef.current.fitBounds?.(bounds);
             }
           }
@@ -333,7 +135,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
 
         const currentPosition = createLatLng(latitude, longitude);
 
-        const currentPoint = {
+        const currentPoint: Point = {
           latitude,
           longitude,
         };
@@ -370,7 +172,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
           markerRef.current = new window.Tmapv2.Marker({
             position: currentPosition,
             map: mapInstanceRef.current,
-            icon: createArrowIcon(bearing),
+            icon: createArrowIcon(bearing, ROUTE_COLOR),
             iconSize: new window.Tmapv2.Size(48, 48),
           });
 
@@ -385,7 +187,7 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
 
         markerRef.current?.setPosition(currentPosition);
 
-        markerRef.current?.setIcon?.(createArrowIcon(bearing));
+        markerRef.current?.setIcon?.(createArrowIcon(bearing, ROUTE_COLOR));
 
         gpsPolylineRef.current?.setPath(gpsPathRef.current);
 

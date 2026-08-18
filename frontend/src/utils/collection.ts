@@ -1,16 +1,20 @@
+import {
+  COLLECTION_KEY,
+  COMPRESS_QUALITY,
+  MAX_COMPRESS_HEIGHT,
+  MAX_COMPRESS_WIDTH,
+} from "../constants/collection";
 import type { CollectionItem } from "../types/collection";
 import type { Shape } from "../types/shape";
 
-const COLLECTION_KEY = "doradora-collection";
-
 /**
- * Canvas를 이용해 Base64 이미지를 800px 이하/JPEG 0.75 품질로 압축합니다.
+ * Canvas를 이용해 Base64 이미지를 지정된 크기/품질로 압축합니다.
  */
 export function compressImage(
   imageDataUrl: string,
-  maxWidth = 800,
-  maxHeight = 800,
-  quality = 0.75,
+  maxWidth = MAX_COMPRESS_WIDTH,
+  maxHeight = MAX_COMPRESS_HEIGHT,
+  quality = COMPRESS_QUALITY,
 ): Promise<string> {
   return new Promise((resolve) => {
     if (!imageDataUrl) {
@@ -89,8 +93,12 @@ export async function saveCollectionItem(
   if (!image) return false;
 
   try {
-    // Collection 전용 이미지 압축 (Complete 페이지 원본 유지)
-    const compressedImage = await compressImage(image, 800, 800, 0.75);
+    const compressedImage = await compressImage(
+      image,
+      MAX_COMPRESS_WIDTH,
+      MAX_COMPRESS_HEIGHT,
+      COMPRESS_QUALITY,
+    );
 
     const currentCollection = getCollection();
 
