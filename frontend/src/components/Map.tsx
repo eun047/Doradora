@@ -15,7 +15,7 @@ import {
 } from "../constants/map";
 import { watchLocation } from "../services/location";
 import { requestWalkingRoute } from "../services/tmap";
-// import { requestWaypoints } from "../services/waypoint";
+import MapZoomControls from "./MapZoomControls";
 import type { Point } from "../types/map";
 import { DEFAULT_SHAPE, type Shape } from "../types/shape";
 import type {
@@ -287,25 +287,10 @@ const Map = forwardRef<MapHandle, MapProps>(function Map(
       />
 
       {!isCapturingInternal && (
-        <div className="absolute top-6 left-4 z-40 flex flex-col overflow-hidden rounded-2xl border-2 border-[#09402e]/20 bg-white/90 shadow-lg backdrop-blur-md">
-          <button
-            type="button"
-            onClick={handleZoomIn}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center border-b border-gray-200 text-xl font-bold text-[#3e2723] transition-all hover:bg-black/5 active:scale-95"
-            aria-label="지도 확대"
-          >
-            +
-          </button>
-
-          <button
-            type="button"
-            onClick={handleZoomOut}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center text-xl font-bold text-[#3e2723] transition-all hover:bg-black/5 active:scale-95"
-            aria-label="지도 축소"
-          >
-            −
-          </button>
-        </div>
+        <MapZoomControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+        />
       )}
     </div>
   );

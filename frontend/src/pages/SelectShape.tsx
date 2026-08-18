@@ -5,6 +5,8 @@ import basketballIcon from "../assets/select-shape/basketball.svg";
 import heartIcon from "../assets/select-shape/heart.svg";
 import lockIcon from "../assets/select-shape/lock.svg";
 import starIcon from "../assets/select-shape/star.svg";
+import BackButton from "../components/BackButton";
+import ShapeCard from "../components/ShapeCard";
 import type { Shape } from "../types/shape";
 
 interface SelectShapeProps {
@@ -75,44 +77,21 @@ function SelectShape({ onSelectShape, onBack }: SelectShapeProps) {
         className="pointer-events-none absolute -left-22 -top-14 z-0 h-212.5 w-166.75 max-w-none"
       />
 
-      <button
-        type="button"
+      <BackButton
         onClick={onBack}
-        className="absolute left-6 top-6 z-30 flex h-15 w-15 cursor-pointer items-center justify-center transition-transform active:scale-95"
-        aria-label="홈으로 돌아가기"
-      >
-        <img src={backIcon} alt="뒤로가기" className="h-10 w-10" />
-      </button>
+        iconSrc={backIcon}
+        ariaLabel="홈으로 돌아가기"
+      />
 
       <div className="absolute inset-x-0 bottom-24 top-24 z-10 overflow-y-auto px-6.75 pb-4 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <div className="grid grid-cols-2 gap-x-5 gap-y-5.5 justify-items-center">
-          {CARDS.map((card) => {
-            if (card.isLocked) {
-              return (
-                <div
-                  key={card.id}
-                  className="flex h-45 w-36 cursor-default items-center justify-center rounded-[20px] border-5 border-[#09402e] bg-[rgba(238,249,255,0.6)] shadow-sm"
-                >
-                  <img src={card.icon} alt="잠김" className="h-30 w-30" />
-                </div>
-              );
-            }
-
-            return (
-              <button
-                key={card.id}
-                type="button"
-                onClick={() => onSelectShape?.(card.shape)}
-                className="flex h-45 w-36 cursor-pointer items-center justify-center rounded-[20px] border-5 border-[#09402e] bg-[#eef9ff] shadow-sm transition-all hover:shadow-md"
-              >
-                <img
-                  src={card.icon}
-                  alt={card.name}
-                  className="h-30 w-30 object-contain"
-                />
-              </button>
-            );
-          })}
+          {CARDS.map((card) => (
+            <ShapeCard
+              key={card.id}
+              card={card}
+              onSelectShape={onSelectShape}
+            />
+          ))}
         </div>
       </div>
 
